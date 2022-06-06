@@ -1,20 +1,20 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2022 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2022 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -22,29 +22,30 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ttim.h"
+#include <stdarg.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 extern ttim_list_t ttim_list;
 
-TTIM_COUNT_T _ttim_remaining_time( TTIM_HND_T hnd );
+TTIM_COUNT_T _ttim_remaining_time(TTIM_HND_T hnd);
 bool _ttim_is_any_running();
-bool _ttim_is_paused( TTIM_HND_T hnd );
-bool _ttim_is_stopped( TTIM_HND_T hnd );
-bool _ttim_node_is_valid( ttim_t *node );
-bool _ttim_time_is_valid( TTIM_COUNT_T time );
-TTIM_HND_T _ttim_get_hnd( void *ptr );
+bool _ttim_is_paused(TTIM_HND_T hnd);
+bool _ttim_is_stopped(TTIM_HND_T hnd);
+bool _ttim_node_is_valid(ttim_t *node);
+bool _ttim_time_is_valid(TTIM_COUNT_T time);
+TTIM_HND_T _ttim_get_hnd(void *ptr);
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 /* user must ensure that the HW has a 32768 cristal and the RCC is configured properly to source LTPIM */
-#define LPTIM_FIXED_CLOCK     32768
+#define LPTIM_FIXED_CLOCK 32768
 /* user must ensure the RCC is configured properly to this value */
 #define LPTIM_FIXED_PRESCALER LPTIM_PRESCALER_DIV32
 
-#if LPTIM_FIXED_PRESCALER==LPTIM_PRESCALER_DIV32
+#if LPTIM_FIXED_PRESCALER == LPTIM_PRESCALER_DIV32
 #define LPTIM_FIXED_PRESCALER_VALUE 32
 #endif
 
@@ -70,102 +71,114 @@ static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_LPTIM1_Init(void);
 /* USER CODE BEGIN PFP */
-
+void print_tim_list();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+void log_debug(const char *fmt, ...)
+{
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    int i = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    HAL_UART_Transmit(&huart1, (uint8_t *)buf, i, HAL_MAX_DELAY);
+}
+
 /* ensure that MX_TIM2_Init initializes the timer in the best suitable configuration for all the
  * expected ms counts to be feasibles.  */
 uint32_t TimeToTicks(uint32_t ms)
 {
-	/* This function calculates the needed ticks or TIM6 to perform a given number of ms.
-	 * If the current TIM6 config does not allow to fullfil the required ms  it is reconfigured to provide a correct number of ticks. OPTIONAL
-	 */
+    /* This function calculates the needed ticks or TIM6 to perform a given number of ms.
+     * If the current TIM6 config does not allow to fullfil the required ms  it is reconfigured to provide a correct number of ticks. OPTIONAL
+     */
 #ifdef LPTIM_FIXED_CLOCK
-	const uint32_t freq = LPTIM_FIXED_CLOCK;
+    const uint32_t freq = LPTIM_FIXED_CLOCK;
 #else
-	uint32_t freq = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_LPTIM1);
+    uint32_t freq = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_LPTIM1);
 #endif
-
 
 #ifdef LPTIM_FIXED_PRESCALER
-	const uint32_t prescaler_div = LPTIM_FIXED_PRESCALER_VALUE;
+    const uint32_t prescaler_div = LPTIM_FIXED_PRESCALER_VALUE;
 #else
-	uint32_t prescaler_div = hlptim1.Init.Clock.Prescaler;
+    uint32_t prescaler_div = hlptim1.Init.Clock.Prescaler;
 #endif
 
-	uint32_t period = ( ms*freq ) / ( prescaler_div *1000 );
+    uint32_t period = (ms * freq) / (prescaler_div * 1000);
 
- return period;
+    return period;
 }
 
 void LPTIM_Start(uint32_t ms)
 {
-	  uint32_t tick = TimeToTicks(  ms );
-	  HAL_LPTIM_SetOnce_Start_IT( &hlptim1 , tick , tick - 20 );
+    HAL_LPTIM_SetOnce_Stop_IT(&hlptim1);
+    uint32_t tick = TimeToTicks(ms);
+    HAL_LPTIM_SetOnce_Start_IT(&hlptim1, tick, tick - 20);
 }
 
-
-void ttim_callback( TTIM_HND_T hnd, void*param )
+void ttim_callback(TTIM_HND_T hnd, void *param)
 {
-	char* text = param;
-char buf[100];
+    char *text = param;
+    char buf[100];
     /* toggle the led */
-    //printf(text);
+    // printf(text);
 
-	int i = sprintf(buf, "%05u %s\n", HAL_GetTick() , text  );
+    	int i = sprintf(buf, "%05u %s\n", HAL_GetTick() , text  );
 
-    HAL_UART_Transmit( &huart1 , buf , i , 1000 );
+      HAL_UART_Transmit( &huart1 , buf , i , 1000 );
+
+    // print_tim_list();
+
     /* restarts the timer */
-   // ttim_start( hnd );
+    // ttim_start( hnd );
 }
 
 __weak void HAL_LPTIM_CompareMatchCallback(LPTIM_HandleTypeDef *hlptim)
 {
-	ttim_update();
+    ttim_update();
 }
-
 
 void print_tim_list()
 {
     ttim_node_t *node = &ttim_list.entry;
     TTIM_COUNT_T temp = node->t;
-    static uint16_t print_idx =0;
-    char buf[100];
-			 TTIM_CRITICAL_START()
-    int i = sprintf( buf, "[%02u]  tb: %02u {", print_idx,   node->t );
+    static uint16_t print_idx = 0;
+    TTIM_CRITICAL_START()
 
-
-        HAL_UART_Transmit( &huart1 , buf , i , 1000 );
+    log_debug("[%02u]  tb: %02u {", print_idx, node->t);
     print_idx++;
 
-    while ( 1 )
+    while (1)
     {
         node = node->next;
 
-        if ( !_ttim_node_is_valid( ( ttim_t * )node ) )
+        if (!_ttim_node_is_valid((ttim_t *)node))
         {
             break;
         }
 
-        TTIM_HND_T hnd = _ttim_get_hnd( node );
+        TTIM_HND_T hnd = _ttim_get_hnd(node);
 
-        int i = sprintf( buf, "%u (to: %2u d: %2d) ", hnd, temp, ( _ttim_time_is_valid( node->t ) ? node->t : -1 ) );
-        HAL_UART_Transmit( &huart1 , buf , i , 1000 );
+        log_debug("%u (to: %2u d: %2d) ", hnd, temp, (_ttim_time_is_valid(node->t) ? node->t : -1));
+        // int i = sprintf( buf, "%u (to: %2u d: %2d) ", hnd, temp, ( _ttim_time_is_valid( node->t ) ? node->t : -1 ) );
+        // HAL_UART_Transmit( &huart1 , buf , i , 1000 );
+
         temp += node->t;
 
-        if ( _ttim_node_is_valid( ( ttim_t * )node->next ) )
+        if (_ttim_node_is_valid((ttim_t *)node->next))
         {
-        	HAL_UART_Transmit( &huart1 , " -> " , 4 , 1000 );
-//            PRINTF( " -> " );
+            // HAL_UART_Transmit( &huart1 , " -> " , 4 , 1000 );
+            log_debug(" -> ");
+            //            PRINTF( " -> " );
         }
     }
 
-  	HAL_UART_Transmit( &huart1 , "}\n" , 2 , 1000 );
-    //PRINTF( "}\n" );
-  	TTIM_CRITICAL_END()
+    // HAL_UART_Transmit( &huart1 , "}\n" , 2 , 1000 );
+    log_debug("}\n");
+    // PRINTF( "}\n" );
+    TTIM_CRITICAL_END()
 }
 /* USER CODE END 0 */
 
@@ -200,35 +213,41 @@ int main(void)
   MX_USART1_UART_Init();
   MX_LPTIM1_Init();
   /* USER CODE BEGIN 2 */
-  /* initializes the ttim library */
-     ttim_init();
+    /* initializes the ttim library */
+    ttim_init();
 
-     /* time in miliseconds */
-     ttim_set( 0, 1000  , ttim_callback , "tim 0" );
-     ttim_set( 1, 2000  , ttim_callback , "tim 1" );
-     ttim_set( 2, 5000  , ttim_callback , "tim 2" );
-     ttim_set( 3, 10000 , ttim_callback , "tim 3" );
+    /* time in miliseconds */
+    ttim_set(0, 1000, ttim_callback, "tim 0");
+    ttim_set(1, 2000, ttim_callback, "tim 1");
+    ttim_set(2, 5000, ttim_callback, "tim 2");
+    ttim_set(3, 10000, ttim_callback, "tim 3");
 
-     ttim_set_periodic( 0 );
-     ttim_set_periodic( 1 );
-     ttim_set_periodic( 2 );
-     ttim_set_periodic( 3 );
+    ttim_set_periodic(0);
+    ttim_set_periodic(1);
+    ttim_set_periodic(2);
+    ttim_set_periodic(3);
+    log_debug("set all periodic\n");
 
-     ttim_start( 0 );
-     ttim_start( 1 );
-     ttim_start( 2 );
-     ttim_start( 3 );
+    ttim_start(0);
+    log_debug("start 0\n");
+    ttim_start(1);
+    log_debug("start 1\n");
+    ttim_start(2);
+    log_debug("start 2\n");
+    ttim_start(3);
+    log_debug("start 3\n");
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+    while (1)
+    {
+        // print_tim_list();
+        // HAL_Delay(1000);
     /* USER CODE END WHILE */
-	   print_tim_list();
-	   HAL_Delay(1000);
+
     /* USER CODE BEGIN 3 */
-  }
+    }
   /* USER CODE END 3 */
 }
 
@@ -607,11 +626,11 @@ static void MX_GPIO_Init(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
-  __disable_irq();
-  while (1)
-  {
-  }
+    /* User can add his own implementation to report the HAL error return state */
+    __disable_irq();
+    while (1)
+    {
+    }
   /* USER CODE END Error_Handler_Debug */
 }
 
@@ -626,8 +645,8 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+    /* User can add his own implementation to report the file name and line number,
+       ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
